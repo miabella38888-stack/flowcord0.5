@@ -26,7 +26,7 @@ let peerConnections = {};
 let remoteStreams = {}; 
 let audioAnalysers = {}; 
 let callRafId = null;
-let remoteUsersData = {}; // Guardar datos de usuarios remotos
+let remoteUsersData = {}; 
 let isViewer = false;
 let currentDmFriendFlowId = null;
 let incomingCallRef = null;
@@ -242,26 +242,22 @@ async function startCallWithFriend() {
     document.getElementById('voice-chat-area').classList.remove('hidden'); 
     document.getElementById('voice-chat-area-title').innerText = "Llamando a " + name + "..."; 
     document.getElementById('btn-share').classList.add('hidden'); 
-    document.getElementById('stream-container').classList.remove('hidden'); 
-    document.getElementById('stream-text').innerText = "Esperando a que " + name + " acepte..."; 
+    document.getElementById('stream-container').classList.add('hidden'); // Ocultar placeholder
+    document.getElementById('btn-gamepad').classList.remove('hidden'); // Mostrar botón de control
     const btnControl = document.getElementById('btn-remote-control'); 
-    btnControl.classList.add('hidden'); // Se muestra al conectar
+    btnControl.classList.add('hidden'); 
     
     if (currentMsgRef) currentMsgRef.off(); 
     currentChatType = null; 
     
-    // Escribir solicitud de llamada
     await db.ref(`dms/${currentChatId}/call`).set({
         caller: session.uid, callerName: session.username, callerAvatar: session.avatar || null, status: 'ringing'
     });
 
-    // Escuchar respuesta
     db.ref(`dms/${currentChatId}/call/status`).on('value', async snap => {
         if (snap.val() === 'accepted') {
             document.getElementById('voice-chat-area-title').innerText = "Llamada con " + name;
-            document.getElementById('stream-text').innerText = "Viendo pantalla de " + name;
             document.getElementById('btn-share').classList.remove('hidden');
-            btnControl.classList.remove('hidden');
             currentVoicePath = `dms/${currentChatId}/call`;
             await joinVoice();
         } else if (snap.val() === 'rejected') {
@@ -281,11 +277,9 @@ function acceptCall() {
     document.getElementById('text-chat-area').classList.add('hidden'); 
     document.getElementById('voice-chat-area').classList.remove('hidden'); 
     document.getElementById('voice-chat-area-title').innerText = "Llamada con " + name;
-    document.getElementById('btn-share').classList.add('hidden');
-    document.getElementById('stream-container').classList.remove('hidden');
-    document.getElementById('stream-text').innerText = "Viendo pantalla de " + name;
-    const btnControl = document.getElementById('btn-remote-control'); 
-    btnControl.classList.remove('hidden'); 
+    document.getElementById('btn-share').classList.remove('hidden');
+    document.getElementById('stream-container').classList.add('hidden'); // Ocultar placeholder
+    document.getElementById('btn-gamepad').classList.remove('hidden'); // Mostrar botón de control
     currentVoicePath = `dms/${currentChatId}/call`;
     joinVoice();
 }
@@ -307,7 +301,7 @@ async function selectVoiceChannel(name) {
     document.getElementById('chat-header-title').innerText = name; 
     document.getElementById('voice-chat-area-title').innerText = name; 
     document.getElementById('btn-share').classList.remove('hidden'); 
-    document.getElementById('btn-remote-control').classList.add('hidden'); 
+    document.getElementById('btn-gamepad').classList.add('hidden'); // Ocultar botón de control en servers
     document.getElementById('stream-container').classList.add('hidden'); 
     if (currentMsgRef) currentMsgRef.off(); 
     currentChatType = null;
@@ -331,8 +325,16 @@ async function joinVoice() {
         await voiceConnectionRef.set({ name: session.username, avatar: session.avatar || null, cam: false });
         voiceConnectionRef.onDisconnect().remove();
 
-        db.ref(`${currentVoicePath}/users`).on('child_added', snap => {
-            if (snap.key !== session.uid) createPeer(snap.key, snap.val());
+        db.ref(`${currentVoicePath}/users`).on('child_added', async snap => {
+            if (snap.key !== session.uid) {
+                // Obtener datos del usuario remoto antes de crear el peer
+                const userSnap = await db.ref('users/' + snap.key).once('value');
+                if (userSnap.exists()) {
+                    remoteUsersData[snap.key] = userSnap.val();
+                    renderCallParticipants();
+                    createPeer(snap.key, snap.val());
+                }
+            }
         });
         db.ref(`${currentVoicePath}/users`).on('child_removed', snap => {
             if (peerConnections[snap.key]) { peerConnections[snap.key].close(); delete peerConnections[snap.key]; }
@@ -349,13 +351,6 @@ async function joinVoice() {
 async function createPeer(remoteUid, remoteUserData) {
     if (peerConnections[remoteUid]) return;
     
-    // Obtener datos completos del usuario remoto
-    const userSnap = await db.ref('users/' + remoteUid).once('value');
-    if (userSnap.exists()) {
-        remoteUsersData[remoteUid] = userSnap.val();
-        renderCallParticipants();
-    }
-
     const pc = new RTCPeerConnection({'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}]});
     peerConnections[remoteUid] = pc;
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
@@ -364,12 +359,15 @@ async function createPeer(remoteUid, remoteUserData) {
     
     pc.ontrack = (e) => {
         remoteStreams[remoteUid] = e.streams[0];
+        
+        // Crear elemento de audio oculto para el usuario remoto
         let audioEl = document.getElementById('remote-audio-' + remoteUid);
         if (!audioEl) { 
             audioEl = document.createElement('audio'); 
             audioEl.id = 'remote-audio-' + remoteUid; 
             audioEl.autoplay = true; 
             audioEl.playsInline = true;
+            audioEl.style.display = 'none';
             document.body.appendChild(audioEl); 
         }
         audioEl.srcObject = e.streams[0];
@@ -383,8 +381,10 @@ async function createPeer(remoteUid, remoteUserData) {
         if (ac.state === 'suspended') ac.resume();
         const src = ac.createMediaStreamSource(e.streams[0]);
         const an = ac.createAnalyser(); an.fftSize = 256;
-        src.connect(an); // No conectar a destination para evitar eco, el <audio> ya lo reproduce
+        src.connect(an);
         audioAnalysers[remoteUid] = an;
+        
+        renderCallParticipants();
     };
 
     if (session.uid < remoteUid) {
@@ -462,7 +462,7 @@ async function startScreenShareWithSettings() { const r = document.getElementByI
 function stopScreenShare() { if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; const sv = document.getElementById('share-video'); sv.srcObject = null; sv.classList.add('hidden'); document.getElementById('stream-placeholder').classList.remove('hidden'); document.getElementById('stream-container').classList.add('hidden'); document.getElementById('btn-share').classList.remove('bg-green-500/20','border','border-green-500','text-green-400'); } }
 function toggleFullscreen(id) { const e = document.getElementById(id); if (!document.fullscreenElement) { if(e.requestFullscreen) e.requestFullscreen(); } else { if(document.exitFullscreen) document.exitFullscreen(); } }
 function toggleRemoteMute(u) { showFlowAlert('Silenciado', `Has silenciado a ${u}.`, 'info'); }
-function requestRemoteControl() { const b = document.getElementById('btn-remote-control'); if (b.innerText.includes("Solicitar")) { b.innerText = "Solicitando..."; b.disabled = true; setTimeout(() => { b.innerText = "Control Concedido"; b.classList.remove('bg-purple-600','hover:bg-purple-700'); b.classList.add('bg-green-500','hover:bg-green-600'); b.disabled = false; document.getElementById('stream-placeholder').insertAdjacentHTML('beforeend', `<div class="fake-cursor absolute top-20 left-40 text-yellow-400 animate-pulse"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M5.5 3.5L18 12l-6 1.5L9.5 19l-4-15.5z"/></svg></div>`); }, 2000); } }
+function requestRemoteControl() { const b = document.getElementById('btn-gamepad'); if (b.title.includes("Solicitar")) { b.title = "Solicitando..."; b.disabled = true; b.classList.add('animate-pulse'); setTimeout(() => { b.title = "Control Concedido"; b.classList.remove('animate-pulse'); b.classList.remove('text-yellow-400'); b.classList.add('text-green-400'); b.disabled = false; }, 2000); } }
 
 function disconnectVoice() { 
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; } 
@@ -481,6 +481,7 @@ function disconnectVoice() {
     }
     currentVoicePath = null;
 
+    document.getElementById('btn-gamepad').classList.add('hidden');
     document.querySelectorAll('.fake-cursor').forEach(e => e.remove()); 
     document.getElementById('voice-chat-area').classList.add('hidden'); 
     document.getElementById('text-chat-area').classList.remove('hidden'); 

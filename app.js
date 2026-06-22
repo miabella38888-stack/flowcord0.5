@@ -86,6 +86,7 @@ let soundCtx = null;
 function playSound(type) {
     try {
         if (!soundCtx) soundCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (soundCtx.state === 'suspended') soundCtx.resume();
         const osc = soundCtx.createOscillator(); const gain = soundCtx.createGain();
         osc.connect(gain); gain.connect(soundCtx.destination);
         if (type === 'message') { osc.frequency.value = 880; osc.type = 'sine'; gain.gain.setValueAtTime(0.1, soundCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, soundCtx.currentTime + 0.15); osc.start(); osc.stop(soundCtx.currentTime + 0.15); }
@@ -113,7 +114,6 @@ window.onload = () => {
                 db.ref('users/' + user.uid).on('value', (snap) => { if (snap.val()) { session = { uid: user.uid, ...snap.val() }; if (!currentServerId && document.getElementById('view-chat').classList.contains('active')) renderDMs(currentDmTab); } });
                 enterApp();
                 
-                // ESCUCHA GLOBAL DE LLAMADAS ENTRANTES
                 db.ref('users/' + session.uid + '/incomingCall').on('value', snap => {
                     const callData = snap.val();
                     if (callData && callData.status === 'ringing' && callData.caller !== session.uid) {
@@ -126,9 +126,7 @@ window.onload = () => {
                     } else if (!callData || (callData && callData.status !== 'ringing')) {
                         document.getElementById('modal-incoming-call').classList.remove('flex');
                         stopRingtone();
-                        if (!currentIncomingCall || currentIncomingCall.status === 'ringing') {
-                            currentIncomingCall = null;
-                        }
+                        if (!currentIncomingCall || currentIncomingCall.status === 'ringing') { currentIncomingCall = null; }
                     }
                 });
             } else { await auth.signOut(); showAuth(); }
@@ -182,8 +180,8 @@ function switchSettingsTab(t) { document.querySelectorAll('.settings-tab').forEa
 async function saveProfile() { session.username = document.getElementById('profile-username').value.trim() || session.username; session.status = document.getElementById('profile-status').value.trim() || "En línea"; if (tempAvatar) session.avatar = tempAvatar; await saveUserToDB(session); enterApp(); closeSettings(); }
 function changeTheme(c1, c2) { document.documentElement.style.setProperty('--flow-purple', c1); document.documentElement.style.setProperty('--flow-yellow', c2); document.getElementById('stop-purple').setAttribute('stop-color', c1); document.getElementById('stop-yellow').setAttribute('stop-color', c2); localStorage.setItem('flowcord_theme', JSON.stringify({ c1, c2 })); }
 function applyCustomTheme() { changeTheme(document.getElementById('custom-color-1').value, document.getElementById('custom-color-2').value); }
-async function requestMediaPermissions() { try { const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: true }); s.getTracks().forEach(t => t.stop()); const d = await navigator.mediaDevices.enumerateDevices(); const m = document.getElementById('settings-mic'); const sp = document.getElementById('settings-speaker'); const c = document.getElementById('settings-cam'); m.innerHTML = ''; c.innerHTML = ''; sp.innerHTML = ''; d.forEach(dev => { if (dev.kind === 'audioinput') m.innerHTML += `<option value="${dev.deviceId}">${dev.label || 'Mic'}</option>`; if (dev.kind === 'audiooutput') sp.innerHTML += `<option value="${dev.deviceId}">${dev.label || 'Altavoz'}</option>`; if (dev.kind === 'videoinput') c.innerHTML += `<option value="${dev.deviceId}">${dev.label || 'Cám'}</option>`; }); showFlowAlert('Permisos OK', 'Dispositivos cargados.', 'success'); } catch (e) { showFlowAlert('Error', 'Permiso denegado.', 'error'); } }
-async function toggleMicTest() { if (micTestActive) { stopMicTest(); } else { try { const mId = document.getElementById('settings-mic').value; const c = { audio: mId ? { deviceId: { exact: mId } } : true }; micTestStream = await navigator.mediaDevices.getUserMedia(c); audioContext = new (window.AudioContext || window.webkitAudioContext)(); const src = audioContext.createMediaStreamSource(micTestStream); analyser = audioContext.createAnalyser(); micGainNode = audioContext.createGain(); const vs = document.getElementById('settings-input-volume'); micGainNode.gain.value = vs ? vs.value / 100 : 1; src.connect(micGainNode); micGainNode.connect(analyser); micGainNode.connect(audioContext.destination); analyser.fftSize = 256; const bl = analyser.frequencyBinCount; const da = new Uint8Array(bl); micTestActive = true; document.getElementById('mic-test-btn').innerText = "Detener"; function upd() { if (!micTestActive) return; analyser.getByteFrequencyData(da); let s = 0; for (let i = 0; i < bl; i++) s += da[i]; document.getElementById('mic-level').style.width = ((s / bl / 255) * 100) + '%'; requestAnimationFrame(upd); } upd(); } catch (e) { showFlowAlert('Error', 'Mic denegado.', 'error'); } } }
+async function requestMediaPermissions() { try { const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: true }); s.getTracks().forEach(t => t.stop()); const d = await navigator.mediaDevices.enumerateDevices(); const m = document.getElementById('settings-mic'); const sp = document.getElementById('settings-speaker'); const c = document.getElementById('settings-cam'); m.innerHTML = '<option value="">Predeterminado</option>'; c.innerHTML = '<option value="">Predeterminado</option>'; sp.innerHTML = '<option value="">Predeterminado</option>'; d.forEach(dev => { if (dev.kind === 'audioinput') m.innerHTML += `<option value="${dev.deviceId}">${dev.label || 'Mic'}</option>`; if (dev.kind === 'audiooutput') sp.innerHTML += `<option value="${dev.deviceId}">${dev.label || 'Altavoz'}</option>`; if (dev.kind === 'videoinput') c.innerHTML += `<option value="${dev.deviceId}">${dev.label || 'Cám'}</option>`; }); showFlowAlert('Permisos OK', 'Dispositivos cargados.', 'success'); } catch (e) { showFlowAlert('Error', 'Permiso denegado.', 'error'); } }
+async function toggleMicTest() { if (micTestActive) { stopMicTest(); } else { try { const mId = document.getElementById('settings-mic').value; const c = { audio: mId ? { deviceId: { exact: mId } } : true }; micTestStream = await navigator.mediaDevices.getUserMedia(c); audioContext = new (window.AudioContext || window.webkitAudioContext)(); if (audioContext.state === 'suspended') audioContext.resume(); const src = audioContext.createMediaStreamSource(micTestStream); analyser = audioContext.createAnalyser(); micGainNode = audioContext.createGain(); const vs = document.getElementById('settings-input-volume'); micGainNode.gain.value = vs ? vs.value / 100 : 1; src.connect(micGainNode); micGainNode.connect(analyser); micGainNode.connect(audioContext.destination); analyser.fftSize = 256; const bl = analyser.frequencyBinCount; const da = new Uint8Array(bl); micTestActive = true; document.getElementById('mic-test-btn').innerText = "Detener"; function upd() { if (!micTestActive) return; analyser.getByteFrequencyData(da); let s = 0; for (let i = 0; i < bl; i++) s += da[i]; document.getElementById('mic-level').style.width = ((s / bl / 255) * 100) + '%'; requestAnimationFrame(upd); } upd(); } catch (e) { showFlowAlert('Error', 'Mic denegado.', 'error'); } } }
 function stopMicTest() { micTestActive = false; if (micTestStream) micTestStream.getTracks().forEach(t => t.stop()); if (audioContext) audioContext.close(); document.getElementById('mic-test-btn').innerText = "Iniciar"; document.getElementById('mic-level').style.width = '0%'; }
 
 // --- AMIGOS ---
@@ -205,7 +203,7 @@ async function joinServer() { const c = document.getElementById('join-code-input
 async function createServer() { const n = document.getElementById('server-name-input').value.trim() || "Nuevo"; const id = 'srv_' + Date.now(); const ic = 'FLW-SRV-' + Math.random().toString(36).substring(2, 6).toUpperCase(); const s = { id, name: n, img: tempServerImg, inviteCode: ic, roles: [{ id: 'r_admin', name: 'Admin', color: '#7B2FBE', isAdmin: true, permissions: ['admin', 'channels', 'kick', 'ban'] }, { id: 'r_everyone', name: 'Miembro', color: '#FFF', isAdmin: false, permissions: [] }], textChannels: ['general'], voiceChannels: ['Sala General'], members: [{ name: session.username, flowId: session.flowId, roleId: 'r_admin', status: 'online' }] }; await saveServerToDB(s); if (!session.servers) session.servers = []; session.servers.push(id); await saveUserToDB(session); closeModal(); addServerToUI(id, n, tempServerImg, true); }
 function addServerToUI(id, name, img, select = false) { const l = document.getElementById('server-list'); const el = document.createElement('div'); el.className = 'server-icon'; el.setAttribute('data-id', id); el.title = name; el.innerHTML = img ? `<img src="${img}" alt="${name}">` : `<span class="text-sm font-bold">${name.charAt(0)}</span>`; el.onclick = () => selectServer(id); el.oncontextmenu = async (e) => { e.preventDefault(); currentServerId = id; const m = document.getElementById('context-menu-server'); const ia = await checkAdmin(id); m.innerHTML = `<button onclick="openServerSettings()" class="w-full text-left px-3 py-2 text-white hover:bg-white/10 rounded text-sm mb-1">Ajustes</button><button onclick="copyInviteCode()" class="w-full text-left px-3 py-2 text-white hover:bg-white/10 rounded text-sm mb-1">Invitación</button>${ia ? '<button onclick="deleteServer()" class="w-full text-left px-3 py-2 text-red-400 hover:bg-red-500/20 rounded text-sm">Eliminar</button>' : ''}`; m.style.left = `${e.pageX}px`; m.style.top = `${e.pageY}px`; m.classList.remove('hidden'); }; l.appendChild(el); if (select) selectServer(id); }
 async function copyInviteCode() { const s = await getServerFromDB(currentServerId); navigator.clipboard.writeText(s.inviteCode); showFlowAlert("Copiado", s.inviteCode, 'success'); document.getElementById('context-menu-server').classList.add('hidden'); }
-async function selectServer(id) { currentServerId = id; const s = await getServerFromDB(id); document.querySelectorAll('.server-icon').forEach(s => s.classList.remove('active')); document.querySelector(`.server-icon[data-id="${id}"]`).classList.add('active'); document.getElementById('sidebar-title').innerText = s.name; let mh = `<div class="p-4"><h3 class="text-white/40 uppercase text-xs">Miembros - ${s.members.length}</h3></div>`; for (const m of s.members) { const u = await getUserByFlowId(m.flowId); const r = s.roles.find(ro => ro.id === m.roleId); const au = u && u.avatar ? u.avatar : null; mh += `<div class="p-2 flex items-center gap-2">${getAvatarHtml(au, m.name, 32)}<span class="text-sm" style="color: ${r ? r.color : '#FFF'}">${m.name}</span></div>`; } document.getElementById('member-list').innerHTML = mh; const ia = await checkAdmin(id); let h = `<div class="flex items-center justify-between px-2 mt-2"><span class="text-xs font-semibold text-white/40 uppercase">Texto</span>${ia ? '<button onclick="openChannelModal(\'text\')" class="text-white/40 hover:text-white">+</button>' : ''}</div>`; s.textChannels.forEach(ch => { h += `<div onclick="selectChannel(this, '${ch}')" class="channel-item px-2 py-2 rounded-md flex items-center gap-2 text-sm cursor-pointer group"><span class="flex-1"># ${ch}</span>${ia ? `<button onclick="event.stopPropagation(); deleteChannel('${ch}', 'text')" class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 p-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>` : ''}</div>`; }); h += `<div class="flex items-center justify-between px-2 mt-4"><span class="text-xs font-semibold text-white/40 uppercase">Voz</span>${ia ? '<button onclick="openChannelModal(\'voice\')" class="text-white/40 hover:text-white">+</button>' : ''}</div>`; s.voiceChannels.forEach(vc => { h += `<div onclick="selectVoiceChannel('${vc}')" class="channel-item px-2 py-2 rounded-md flex items-center gap-2 text-sm cursor-pointer group"><span class="flex-1">🔊 ${vc}</span>${ia ? `<button onclick="event.stopPropagation(); deleteChannel('${vc}', 'voice')" class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 p-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>` : ''}</div><div id="voice-users-${vc}" class="ml-6 mb-2 space-y-1"></div>`; }); document.getElementById('sidebar-content').innerHTML = h; document.getElementById('dm-tabs').classList.add('hidden'); document.getElementById('btn-add-friend').classList.add('hidden'); document.getElementById('btn-toggle-members').classList.remove('hidden'); document.getElementById('btn-call').classList.add('hidden'); db.ref(`servers/${id}/voice`).on('value', snap => { const vd = snap.val() || {}; s.voiceChannels.forEach(vc => { const d = document.getElementById('voice-users-' + vc); if (d) { let uh = ''; const us = vd[vc] && vd[vc].users ? vd[vc].users : {}; for (const uId in us) { const u = us[uId]; uh += `<div id="voice-user-${uId}" class="flex items-center gap-2 mt-1 text-xs text-white/60 border-2 border-transparent rounded-full p-0.5"><div class="w-5 h-5 rounded-full ${u.avatar ? 'bg-cover bg-center' : 'flow-gradient-bg'}" style="${u.avatar ? `background-image: url('${u.avatar}')` : ''}"></div><span>${u.name}</span></div>`; } d.innerHTML = uh; } }); }); const ft = document.querySelector('.channel-item'); if (ft) selectChannel(ft, s.textChannels[0]); }
+async function selectServer(id) { currentServerId = id; const s = await getServerFromDB(id); document.querySelectorAll('.server-icon').forEach(s => s.classList.remove('active')); document.querySelector(`.server-icon[data-id="${id}"]`).classList.add('active'); document.getElementById('sidebar-title').innerText = s.name; let mh = `<div class="p-4"><h3 class="text-white/40 uppercase text-xs">Miembros - ${s.members.length}</h3></div>`; for (const m of s.members) { const u = await getUserByFlowId(m.flowId); const r = s.roles.find(ro => ro.id === m.roleId); const au = u && u.avatar ? u.avatar : null; mh += `<div class="p-2 flex items-center gap-2">${getAvatarHtml(au, m.name, 32)}<span class="text-sm" style="color: ${r ? r.color : '#FFF'}">${m.name}</span></div>`; } document.getElementById('member-list').innerHTML = mh; const ia = await checkAdmin(id); let h = `<div class="flex items-center justify-between px-2 mt-2"><span class="text-xs font-semibold text-white/40 uppercase">Texto</span>${ia ? '<button onclick="openChannelModal(\'text\')" class="text-white/40 hover:text-white">+</button>' : ''}</div>`; s.textChannels.forEach(ch => { h += `<div onclick="selectChannel(this, '${ch}')" class="channel-item px-2 py-2 rounded-md flex items-center gap-2 text-sm cursor-pointer group"><span class="flex-1"># ${ch}</span>${ia ? `<button onclick="event.stopPropagation(); deleteChannel('${ch}', 'text')" class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 p-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>` : ''}</div>`; }); h += `<div class="flex items-center justify-between px-2 mt-4"><span class="text-xs font-semibold text-white/40 uppercase">Voz</span>${ia ? '<button onclick="openChannelModal(\'voice\')" class="text-white/40 hover:text-white">+</button>' : ''}</div>`; s.voiceChannels.forEach(vc => { h += `<div onclick="selectVoiceChannel('${vc}', event)" class="channel-item px-2 py-2 rounded-md flex items-center gap-2 text-sm cursor-pointer group"><span class="flex-1">🔊 ${vc}</span>${ia ? `<button onclick="event.stopPropagation(); deleteChannel('${vc}', 'voice')" class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 p-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>` : ''}</div><div id="voice-users-${vc}" class="ml-6 mb-2 space-y-1"></div>`; }); document.getElementById('sidebar-content').innerHTML = h; document.getElementById('dm-tabs').classList.add('hidden'); document.getElementById('btn-add-friend').classList.add('hidden'); document.getElementById('btn-toggle-members').classList.remove('hidden'); document.getElementById('btn-call').classList.add('hidden'); db.ref(`servers/${id}/voice`).on('value', snap => { const vd = snap.val() || {}; s.voiceChannels.forEach(vc => { const d = document.getElementById('voice-users-' + vc); if (d) { let uh = ''; const us = vd[vc] && vd[vc].users ? vd[vc].users : {}; for (const uId in us) { const u = us[uId]; uh += `<div id="voice-user-${uId}" class="flex items-center gap-2 mt-1 text-xs text-white/60 border-2 border-transparent rounded-full p-0.5"><div class="w-5 h-5 rounded-full ${u.avatar ? 'bg-cover bg-center' : 'flow-gradient-bg'}" style="${u.avatar ? `background-image: url('${u.avatar}')` : ''}"></div><span>${u.name}</span></div>`; } d.innerHTML = uh; } }); }); const ft = document.querySelector('.channel-item'); if (ft) selectChannel(ft, s.textChannels[0]); }
 async function deleteChannel(n, t) { if (!await checkAdmin(currentServerId)) return; const s = await getServerFromDB(currentServerId); if (t === 'text') { s.textChannels = s.textChannels.filter(c => c !== n); await db.ref(`servers/${currentServerId}/messages/${n}`).remove(); } else { s.voiceChannels = s.voiceChannels.filter(c => c !== n); } await saveServerToDB(s); selectServer(currentServerId); showFlowAlert("OK", "Canal borrado.", 'success'); }
 async function openServerSettings() { if (!await checkAdmin(currentServerId)) return; currentSettingsServerId = currentServerId; const s = await getServerFromDB(currentSettingsServerId); document.getElementById('settings-server-name').innerText = s.name; document.getElementById('srv-name-input').value = s.name; const rl = document.getElementById('roles-list'); rl.innerHTML = ''; s.roles.forEach(r => { rl.innerHTML += `<div class="flex items-center justify-between bg-black/20 px-4 py-2 rounded-lg"><div class="flex items-center gap-2"><div style="width:12px;height:12px;border-radius:50%;background:${r.color};"></div><span style="color:${r.color}" class="font-medium text-sm">${r.name}</span>${r.isAdmin ? '<span class="text-xs text-red-400">(Admin)</span>' : ''}</div>${r.id !== 'r_admin' && r.id !== 'r_everyone' ? `<button onclick="deleteRole('${r.id}')" class="text-white/40 hover:text-red-400 text-xs">Borrar</button>` : ''}</div>`; }); const ld = document.getElementById('settings-members-list'); ld.innerHTML = ''; for (const [i, m] of s.members.entries()) { const ro = s.roles.map(r => `<option value="${r.id}" ${m.roleId === r.id ? 'selected' : ''}>${r.name}</option>`).join(''); const u = await getUserByFlowId(m.flowId); const au = u && u.avatar ? u.avatar : null; ld.innerHTML += `<div class="flex items-center gap-3 bg-black/20 p-2 rounded-lg">${getAvatarHtml(au, m.name, 32)}<span class="text-white text-sm flex-1">${m.name}</span><select onchange="updateMemberRole(${i}, this.value)" class="bg-black/30 border border-white/10 rounded px-2 py-1 text-white text-xs outline-none">${ro}</select></div>`; } document.getElementById('modal-server-settings').classList.add('flex'); document.getElementById('context-menu-server').classList.add('hidden'); switchServerSettingsTab('general'); }
 async function deleteRole(rId) { const s = await getServerFromDB(currentSettingsServerId); s.roles = s.roles.filter(r => r.id !== rId); await saveServerToDB(s); openServerSettings(); }
@@ -244,15 +242,12 @@ async function startCallWithFriend() {
     const recipient = await getUserByFlowId(currentDmFriendFlowId);
     if (!recipient) return showFlowAlert("Error", "Usuario no encontrado.", "error");
     
-    // GUARDAR el chatId ANTES de hacer cualquier cosa
     const callChatId = currentChatId;
     
-    // Escribir solicitud de llamada en el nodo del destinatario
     await db.ref('users/' + recipient.uid + '/incomingCall').set({
         caller: session.uid, callerName: session.username, callerAvatar: session.avatar || null, chatId: callChatId, status: 'ringing'
     });
 
-    // Escuchar respuesta en el nodo del destinatario
     callStatusRef = db.ref('users/' + recipient.uid + '/incomingCall/status');
     callStatusRef.on('value', async snap => {
         const status = snap.val();
@@ -273,13 +268,9 @@ async function startCallWithFriend() {
 async function acceptCall() {
     if (!currentIncomingCall) return;
     
-    // GUARDAR todos los datos ANTES de hacer cualquier cambio en Firebase
     const savedCallData = { ...currentIncomingCall };
     
-    // Avisar al llamante que aceptaste
     await db.ref('users/' + savedCallData.caller + '/incomingCall/status').set('accepted');
-    
-    // Limpiar mi notificación
     await db.ref('users/' + session.uid + '/incomingCall').remove();
     stopRingtone();
     document.getElementById('modal-incoming-call').classList.remove('flex');
@@ -293,7 +284,6 @@ async function acceptCall() {
     document.getElementById('stream-container').classList.add('hidden');
     document.getElementById('btn-gamepad').classList.remove('hidden');
     
-    // Usar el chatId guardado
     currentChatId = savedCallData.chatId;
     currentVoicePath = `dms/${currentChatId}/call`;
     currentIncomingCall = null;
@@ -311,10 +301,10 @@ function rejectCall() {
     currentIncomingCall = null;
 }
 
-async function selectVoiceChannel(name) { 
+async function selectVoiceChannel(name, ev) { 
     isViewer = false; 
     document.querySelectorAll('.channel-item').forEach(c => c.classList.remove('active')); 
-    event.currentTarget.classList.add('active'); 
+    if(ev) ev.target.classList.add('active');
     document.getElementById('text-chat-area').classList.add('hidden'); 
     document.getElementById('voice-chat-area').classList.remove('hidden'); 
     document.getElementById('chat-header-icon').innerText = "🔊"; 
@@ -333,6 +323,7 @@ async function joinVoice() {
     try {
         const micId = document.getElementById('settings-mic')?.value;
         const camId = document.getElementById('settings-cam')?.value;
+        // Arreglado: Solo usar exact si hay un ID
         const constraints = { audio: micId ? { deviceId: { exact: micId } } : true, video: camId ? { deviceId: { exact: camId } } : true };
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
         isMicOn = true; isCameraOn = false;
@@ -370,14 +361,7 @@ async function joinVoice() {
 async function createPeer(remoteUid) {
     if (peerConnections[remoteUid]) return;
     
-    const pc = new RTCPeerConnection({
-        'iceServers': [
-            {'urls': 'stun:stun.l.google.com:19302'},
-            {'urls': 'turn:openrelay.metered.ca:80', 'username': 'openrelayproject', 'credential': 'openrelayproject'},
-            {'urls': 'turn:openrelay.metered.ca:443', 'username': 'openrelayproject', 'credential': 'openrelayproject'},
-            {'urls': 'turn:openrelay.metered.ca:443?transport=tcp', 'username': 'openrelayproject', 'credential': 'openrelayproject'}
-        ]
-    });
+    const pc = new RTCPeerConnection({ 'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}] });
     peerConnections[remoteUid] = pc;
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     
@@ -396,6 +380,9 @@ async function createPeer(remoteUid) {
             document.body.appendChild(audioEl); 
         }
         audioEl.srcObject = e.streams[0];
+        
+        // Forzar reproducción de audio remoto
+        audioEl.onloadedmetadata = () => { audioEl.play().catch(err => console.log("Audio play error:", err)); };
         audioEl.play().catch(err => console.log("Autoplay blocked:", err)); 
         
         const spkId = document.getElementById('settings-speaker')?.value;
@@ -495,7 +482,6 @@ async function disconnectVoice() {
     if (voiceConnectionRef) { voiceConnectionRef.remove(); voiceConnectionRef = null; }
     if (currentVoicePath) { db.ref(`${currentVoicePath}/users`).off(); db.ref(`${currentVoicePath}/offers`).off(); db.ref(`${currentVoicePath}/answers`).off(); db.ref(`${currentVoicePath}/ice`).off(); }
     
-    // Limpiar notificaciones de llamada
     if (callStatusRef) { callStatusRef.off(); callStatusRef = null; }
     if (currentIncomingCall) { 
         db.ref('users/' + currentIncomingCall.caller + '/incomingCall/status').set('rejected'); 

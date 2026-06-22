@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flowcord</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- VISTA DE AUTENTICACIÓN -->
+    <div id="view-auth" class="fixed inset-0 z-[200] flex items-center justify-center bg-[var(--bg-main)]">
+        <div class="glass p-10 rounded-2xl w-96 border border-white/10 flex flex-col items-center">
+            <svg width="120" height="120" viewBox="0 0 100 100" class="mb-6 animate-float">
+                <circle cx="50" cy="50" r="45" fill="url(#flow-grad)" opacity="0.1"/>
+                <circle cx="50" cy="50" r="35" fill="url(#flow-grad)" opacity="0.15"/>
+                <ellipse cx="50" cy="50" rx="40" ry="12" fill="none" stroke="url(#flow-grad)" stroke-width="1.5" opacity="0.4" transform="rotate(-20 50 50)"/>
+                <circle cx="50" cy="50" r="28" fill="#111319" stroke="url(#flow-grad)" stroke-width="2"/>
+                <rect x="30" y="43" width="40" height="14" rx="7" fill="url(#flow-grad)"/>
+            </svg>
+            <h2 id="auth-title" class="text-2xl font-bold text-white mb-1">Bienvenido a Flowcord</h2>
+            <p id="auth-subtitle" class="text-white/50 mb-6 text-sm">Inicia sesión para volver a la magia.</p>
+            <div id="auth-error" class="hidden w-full bg-red-500/20 border border-red-500 text-red-400 text-sm rounded-lg px-4 py-2 mb-4 text-center"></div>
+            
+            <div id="auth-form-login" class="w-full space-y-3">
+                <input id="login-email" type="email" placeholder="Correo Electrónico" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500">
+                <input id="login-password" type="password" placeholder="Contraseña" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500">
+                <button onclick="login()" class="w-full flow-gradient-bg text-white py-3 rounded-lg font-semibold">Iniciar Sesión</button>
+            </div>
+            
+            <div id="auth-form-register" class="w-full space-y-3 hidden">
+                <input id="reg-username" type="text" placeholder="Nombre de Usuario" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500">
+                <input id="reg-email" type="email" placeholder="Correo Electrónico" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500">
+                <input id="reg-password" type="password" placeholder="Contraseña" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500">
+                <input id="reg-confirm" type="password" placeholder="Confirmar Contraseña" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500">
+                <button onclick="register()" class="w-full flow-gradient-bg text-white py-3 rounded-lg font-semibold">Crear Cuenta</button>
+            </div>
+
+            <div class="mt-6 text-sm text-white/50 text-center">
+                <span id="auth-toggle-text">¿No tienes una cuenta?</span>
+                <button onclick="toggleAuthMode()" id="auth-toggle-btn" class="text-purple-400 font-semibold ml-1">Regístrate</button>
+            </div>
+        </div>
+    </div>
+
+    <svg width="0" height="0" style="position:absolute;"><defs><linearGradient id="flow-grad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse"><stop id="stop-purple" stop-color="#7B2FBE"/><stop id="stop-yellow" offset="1" stop-color="#F2C94C"/></linearGradient></defs></svg>
+
+    <!-- APP PRINCIPAL -->
+    <div id="app-main" class="flex-1 flex overflow-hidden relative hidden">
+        <nav class="w-20 glass flex flex-col items-center py-4 gap-3 border-r border-white/5 z-30">
+            <div id="btn-home" class="server-icon active" onclick="goToDMs()" title="DMs"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M13 2L4.09 12.97C3.7 13.45 4.02 14.15 4.63 14.15H10L9 22L17.91 11.03C18.3 10.55 17.98 9.85 17.37 9.85H12L13 2Z" fill="url(#flow-grad)"/></svg></div>
+            <div class="w-8 h-px bg-white/10 my-1"></div>
+            <div id="server-list" class="flex flex-col gap-3"></div>
+            <div class="server-icon text-blue-400 hover:bg-blue-500 hover:text-white" onclick="openJoinModal()" title="Unirse a un Servidor"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8h-2v3h-3v2h3v3h2v-3h3v-2h-3V8zM4 8h2v8H4V8zm4-4h2v12H8V4zm4 2h2v10h-2V6z"/></svg></div>
+            <div class="server-icon text-green-400 hover:bg-green-500 hover:text-white" onclick="openModal()" title="Crear Servidor"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+        </nav>
+
+        <aside class="w-60 glass flex flex-col border-r border-white/5 z-20">
+            <div class="p-4 border-b border-white/5 flex items-center justify-between">
+                <div><h2 id="sidebar-title" class="font-semibold text-white text-lg">Mensajes Directos</h2><p id="sidebar-subtitle" class="text-xs text-white/40">Tus conversaciones</p></div>
+                <button id="btn-add-friend" onclick="openAddFriendModal()" class="text-white/60 hover:text-white p-1.5 rounded hover:bg-white/10"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-1V8H4v3H1v2h3v3h2v-3h3v-2H6zm9 3c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4z"/></svg></button>
+            </div>
+            <div id="dm-tabs" class="flex gap-1 p-2 border-b border-white/5">
+                <button onclick="renderDMs('friends')" id="tab-friends" class="flex-1 text-xs text-white/60 hover:text-white py-1 rounded hover:bg-white/5">Amigos</button>
+                <button onclick="renderDMs('pending')" id="tab-pending" class="flex-1 text-xs text-white/60 hover:text-white py-1 rounded hover:bg-white/5">Pendientes</button>
+                <button onclick="renderDMs('blocked')" id="tab-blocked" class="flex-1 text-xs text-white/60 hover:text-white py-1 rounded hover:bg-white/5">Bloqueados</button>
+            </div>
+            <div id="sidebar-content" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
+            <div class="bg-black/20 p-3 flex items-center gap-2">
+                <div id="user-avatar" class="w-8 h-8 rounded-full flow-gradient-bg bg-cover bg-center"></div>
+                <div class="flex-1"><p id="user-name" class="text-sm text-white font-medium">Usuario</p><p id="user-status" class="text-xs text-green-400">En línea</p></div>
+                <button onclick="openSettings()" class="text-white/60 hover:text-white p-1.5 rounded hover:bg-white/10"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94 0 .31.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.162 3.6-3.6 3.6z"/></svg></button>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex bg-transparent relative">
+            <div id="view-chat" class="view active flex-1 flex-col overflow-hidden">
+                <div class="h-12 border-b border-white/5 glass flex items-center px-4 shadow-sm">
+                    <span id="chat-header-icon" class="text-white/60 mr-2">#</span>
+                    <h3 id="chat-header-title" class="font-semibold text-white">general</h3>
+                    <div class="ml-auto flex gap-3 text-white/60 items-center">
+                        <button id="btn-call" onclick="startCallWithFriend()" class="hidden hover:text-white" title="Llamar"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg></button>
+                        <button id="btn-toggle-members" onclick="toggleMembers()" class="hidden hover:text-white" title="Miembros"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></button>
+                    </div>
+                </div>
+                <div class="flex-1 flex overflow-hidden">
+                    <div id="text-chat-area" class="flex-1 flex flex-col overflow-hidden">
+                        <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+                        <div class="p-4"><div class="chat-input rounded-xl flex items-center p-2 pl-4">
+                            <input id="chat-input" type="text" placeholder="Escribe un mensaje" class="flex-1 bg-transparent outline-none text-white placeholder-white/30" onkeydown="handleKeyPress(event)">
+                        </div></div>
+                    </div>
+                    
+                    <div id="voice-chat-area" class="hidden flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-b from-transparent to-purple-950/10">
+                        <div class="glass w-full max-w-3xl rounded-2xl p-8 flex flex-col items-center border border-white/10">
+                            <h2 id="voice-chat-area-title" class="text-2xl font-bold text-white mb-6">Sala de Voz</h2>
+                            <div id="stream-container" class="hidden w-full h-80 bg-black rounded-xl mb-6 flex flex-col items-center justify-center border border-white/10 relative overflow-hidden">
+                                <video id="share-video" class="hidden w-full h-full object-cover" autoplay playsinline></video>
+                                <div id="stream-placeholder" class="text-white/40 flex flex-col items-center gap-2 w-full h-full justify-center absolute inset-0">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/></svg>
+                                    <span id="stream-text" class="text-sm font-medium">Compartiendo tu pantalla</span>
+                                </div>
+                                <div class="absolute top-2 right-2 flex gap-2 z-10">
+                                    <button onclick="toggleFullscreen('stream-container')" class="bg-black/50 hover:bg-black/80 text-white p-2 rounded-full" title="Pantalla Completa"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg></button>
+                                </div>
+                                <button id="btn-remote-control" onclick="requestRemoteControl()" class="hidden absolute bottom-4 right-4 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">Solicitar Control</button>
+                            </div>
+                            <div id="participants-grid" class="flex flex-wrap gap-6 justify-center mb-6 w-full"></div>
+                            <div class="flex gap-3 mt-2">
+                                <button id="btn-mic" onclick="toggleMic()" class="glass p-3 rounded-full hover:bg-white/10 text-white transition-smooth" title="Silenciar">
+                                    <svg id="icon-mic-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                                    <svg id="icon-mic-off" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                                </button>
+                                <button id="btn-camera" onclick="toggleCamera()" class="bg-red-500/20 border border-red-500 p-3 rounded-full hover:bg-red-500/40 text-red-400 transition-smooth" title="Encender Cámara">
+                                    <svg id="icon-cam-on" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                                    <svg id="icon-cam-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                </button>
+                                <button id="btn-share" onclick="openStreamSettings()" class="glass p-3 rounded-full hover:bg-white/10 text-white transition-smooth" title="Transmitir Pantalla">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                                </button>
+                                <button onclick="disconnectVoice()" class="bg-red-500/20 border border-red-500 p-3 rounded-full hover:bg-red-500/40 text-red-400 transition-smooth" title="Desconectar">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path><line x1="23" y1="1" x2="1" y2="23"></line></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <aside id="member-list" class="member-list w-60 glass border-l border-white/5 flex flex-col overflow-hidden"></aside>
+                </div>
+            </div>
+
+            <!-- VISTA AJUSTES DE USUARIO -->
+            <div id="view-settings" class="view flex-1 flex-col overflow-hidden absolute inset-0 bg-transparent z-40 hidden">
+                <div class="flex flex-1 overflow-hidden">
+                    <aside class="w-60 glass flex flex-col border-r border-white/5 p-3 pt-10">
+                        <p class="text-xs font-bold text-white/40 uppercase px-2 mb-2">Ajustes de Usuario</p>
+                        <button onclick="switchSettingsTab('account')" id="btn-set-account" class="text-left px-2 py-1.5 rounded bg-white/10 text-white text-sm mb-1">Mi Cuenta</button>
+                        <button onclick="switchSettingsTab('profile')" id="btn-set-profile" class="text-left px-2 py-1.5 rounded hover:bg-white/5 text-white/60 text-sm mb-1">Perfil</button>
+                        <button onclick="switchSettingsTab('voice')" id="btn-set-voice" class="text-left px-2 py-1.5 rounded hover:bg-white/5 text-white/60 text-sm mb-1">Voz y Video</button>
+                        <button onclick="switchSettingsTab('appearance')" id="btn-set-appearance" class="text-left px-2 py-1.5 rounded hover:bg-white/5 text-white/60 text-sm mb-1">Apariencia</button>
+                        <div class="mt-auto border-t border-white/10 pt-3">
+                            <button onclick="logout()" class="text-left px-2 py-1.5 rounded hover:bg-white/5 text-red-400 text-sm w-full">Cerrar Sesión</button>
+                            <button onclick="closeSettings()" class="text-left px-2 py-1.5 rounded hover:bg-white/5 text-white/60 text-sm w-full mt-1">Volver a Flowcord</button>
+                        </div>
+                    </aside>
+                    <div class="flex-1 overflow-y-auto p-10 pt-10">
+                        <div id="set-tab-account" class="settings-tab">
+                            <h1 class="text-2xl font-bold text-white mb-6">Mi Cuenta</h1>
+                            <div class="glass rounded-xl p-6 border border-white/10 flex gap-6 items-center mb-6">
+                                <div id="account-avatar" class="w-24 h-24 rounded-full flow-gradient-bg border-4 border-black/20 bg-cover bg-center"></div>
+                                <div>
+                                    <h2 id="account-name" class="text-xl font-bold text-white">TuUsuario</h2>
+                                    <p id="account-email" class="text-white/50 mb-3">usuario@flowcord.app</p>
+                                    <p id="account-flowid" class="text-purple-400 font-mono text-sm mb-3">ID: FLW-XXXXXX</p>
+                                </div>
+                            </div>
+                            <div class="border-t border-white/10 pt-6 mt-6">
+                                <h4 class="text-red-400 font-bold mb-2">Zona de Peligro</h4>
+                                <button onclick="deleteMyAccount()" class="bg-red-500/20 hover:bg-red-500/40 border border-red-500 text-red-400 px-4 py-2 rounded text-sm">Eliminar Mi Cuenta</button>
+                            </div>
+                        </div>
+                        <div id="set-tab-profile" class="settings-tab hidden">
+                            <h1 class="text-2xl font-bold text-white mb-6">Perfil</h1>
+                            <div class="glass rounded-xl p-6 border border-white/10 mb-6">
+                                <div id="profile-avatar-preview" class="w-24 h-24 rounded-full bg-purple-600 border-4 border-black/20 bg-cover bg-center mb-6"></div>
+                                <div class="grid grid-cols-2 gap-4 mt-4">
+                                    <div><label class="text-xs text-white/50 uppercase mb-1 block">Usuario</label><input id="profile-username" type="text" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500"></div>
+                                    <div><label class="text-xs text-white/50 uppercase mb-1 block">Estado</label><input id="profile-status" type="text" placeholder="Ej: Jugando" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500"></div>
+                                </div>
+                                <div class="flex gap-4 mt-6">
+                                    <label class="cursor-pointer bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded text-sm">Cambiar Avatar<input type="file" id="profile-avatar-input" class="hidden" accept="image/*"></label>
+                                </div>
+                                <button onclick="saveProfile()" class="mt-6 flow-gradient-bg text-white px-6 py-2 rounded-lg font-semibold">Guardar Cambios</button>
+                            </div>
+                        </div>
+                        <div id="set-tab-voice" class="settings-tab hidden">
+                            <h1 class="text-2xl font-bold text-white mb-6">Voz y Video</h1>
+                            <div class="glass rounded-xl p-6 border border-white/10 mb-6 space-y-6">
+                                <div>
+                                    <label class="text-xs text-white/50 uppercase mb-1 block">Dispositivo de Entrada (Micrófono)</label>
+                                    <select id="settings-mic" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500"></select>
+                                    <div class="mt-2"><label class="text-xs text-white/50 uppercase mb-1 block">Volumen de Entrada</label><input type="range" min="0" max="100" value="100" id="settings-input-volume" class="w-full"></div>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-white/50 uppercase mb-1 block">Dispositivo de Salida (Altavoces)</label>
+                                    <select id="settings-speaker" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500"></select>
+                                </div>
+                                <div><label class="text-xs text-white/50 uppercase mb-1 block">Cámara</label><select id="settings-cam" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500"></select></div>
+                                <div class="flex gap-4">
+                                    <button onclick="requestMediaPermissions()" class="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded text-sm">Cargar Dispositivos</button>
+                                </div>
+                                <div class="border-t border-white/10 pt-4 mt-4">
+                                    <label class="text-xs text-white/50 uppercase mb-2 block">Probar Micrófono (Habla y escúchate)</label>
+                                    <div class="flex items-center gap-4">
+                                        <button onclick="toggleMicTest()" id="mic-test-btn" class="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded text-sm">Iniciar Prueba</button>
+                                        <div class="flex-1 h-2 bg-black/30 rounded-full overflow-hidden"><div id="mic-level" class="h-full flow-gradient-bg w-0 transition-all duration-75"></div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="set-tab-appearance" class="settings-tab hidden">
+                            <h1 class="text-xl font-bold text-white mb-4">Apariencia</h1>
+                            <div class="glass rounded-xl p-6 border border-white/10 mb-6">
+                                <h3 class="text-white/80 font-medium mb-4">Temas Predefinidos</h3>
+                                <div class="grid grid-cols-2 gap-4 max-w-md">
+                                    <div onclick="changeTheme('#7B2FBE', '#F2C94C')" class="glass p-4 rounded-xl border border-purple-500 cursor-pointer"><div class="h-24 rounded-md mb-2" style="background: linear-gradient(135deg, #7B2FBE, #F2C94C);"></div><p class="text-white font-medium">Flowcord</p></div>
+                                    <div onclick="changeTheme('#0EA5E9', '#22D3EE')" class="glass p-4 rounded-xl border border-transparent hover:border-white/20 cursor-pointer"><div class="h-24 rounded-md mb-2" style="background: linear-gradient(135deg, #0EA5E9, #22D3EE);"></div><p class="text-white font-medium">Océano</p></div>
+                                    <div onclick="changeTheme('#EF4444', '#F59E0B')" class="glass p-4 rounded-xl border border-transparent hover:border-white/20 cursor-pointer"><div class="h-24 rounded-md mb-2" style="background: linear-gradient(135deg, #EF4444, #F59E0B);"></div><p class="text-white font-medium">Fuego</p></div>
+                                    <div onclick="changeTheme('#10B981', '#84CC16')" class="glass p-4 rounded-xl border border-transparent hover:border-white/20 cursor-pointer"><div class="h-24 rounded-md mb-2" style="background: linear-gradient(135deg, #10B981, #84CC16);"></div><p class="text-white font-medium">Matrix</p></div>
+                                </div>
+                            </div>
+                            <div class="glass rounded-xl p-6 border border-white/10">
+                                <h3 class="text-white/80 font-medium mb-4">Personalizado (Hex)</h3>
+                                <div class="flex gap-6 items-center">
+                                    <div class="flex flex-col items-center gap-2"><input type="color" id="custom-color-1" value="#7B2FBE" class="w-16 h-16 rounded cursor-pointer bg-transparent border-none"><span class="text-xs text-white/60">Color 1</span></div>
+                                    <div class="flex flex-col items-center gap-2"><input type="color" id="custom-color-2" value="#F2C94C" class="w-16 h-16 rounded cursor-pointer bg-transparent border-none"><span class="text-xs text-white/60">Color 2</span></div>
+                                    <button onclick="applyCustomTheme()" class="flow-gradient-bg text-white px-6 py-2 rounded-lg font-semibold">Aplicar Tema</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Menús Contextuales -->
+    <div id="context-menu-server" class="fixed glass rounded-lg p-1 shadow-xl border border-white/10 hidden z-[100] w-48"></div>
+
+    <!-- Modales -->
+    <div id="modal-create" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center">
+        <div class="glass rounded-2xl p-8 w-96 border border-white/10">
+            <h2 class="text-2xl font-bold text-white mb-6 text-center">Crea tu servidor</h2>
+            <div class="flex justify-center mb-6">
+                <label class="cursor-pointer block w-24 h-24 rounded-full bg-black/30 border-2 border-dashed border-white/30 hover:border-purple-500 flex items-center justify-center relative overflow-hidden">
+                    <input type="file" id="server-img-input" class="hidden" accept="image/*">
+                    <img id="server-img-preview" class="absolute inset-0 w-full h-full object-cover hidden">
+                    <span id="upload-text" class="text-white/40 text-xs uppercase">Subir</span>
+                </label>
+            </div>
+            <input id="server-name-input" type="text" placeholder="Nombre del servidor" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500 mb-6">
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeModal()" class="px-4 py-2 text-white/70 hover:text-white">Cancelar</button>
+                <button onclick="createServer()" class="flow-gradient-bg text-white px-6 py-2 rounded-lg font-semibold">Crear</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-create-channel" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center">
+        <div class="glass rounded-2xl p-8 w-96 border border-white/10">
+            <h2 id="modal-channel-title" class="text-2xl font-bold text-white mb-6 text-center">Crear Canal</h2>
+            <input id="channel-name-input" type="text" placeholder="nuevo-canal" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500 mb-6">
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeChannelModal()" class="px-4 py-2 text-white/70 hover:text-white">Cancelar</button>
+                <button onclick="createChannel()" class="flow-gradient-bg text-white px-6 py-2 rounded-lg font-semibold">Crear Canal</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-add-friend" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center">
+        <div class="glass rounded-2xl p-8 w-96 border border-white/10">
+            <h2 class="text-2xl font-bold text-white mb-6 text-center">Añadir Amigo</h2>
+            <div id="friend-error" class="hidden w-full bg-red-500/20 border border-red-500 text-red-400 text-sm rounded-lg px-4 py-2 mb-4 text-center"></div>
+            <div id="friend-success" class="hidden w-full bg-green-500/20 border border-green-500 text-green-400 text-sm rounded-lg px-4 py-2 mb-4 text-center"></div>
+            <input id="friend-id-input" type="text" placeholder="Ej: FLW-A1B2C3" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500 mb-6">
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeFriendModal()" class="px-4 py-2 text-white/70 hover:text-white">Cancelar</button>
+                <button onclick="sendFriendRequest()" class="flow-gradient-bg text-white px-6 py-2 rounded-lg font-semibold">Enviar Solicitud</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-stream-settings" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center">
+        <div class="glass rounded-2xl p-8 w-96 border border-white/10">
+            <h2 class="text-2xl font-bold text-white mb-6 text-center">Ajustes de Transmisión</h2>
+            <div class="space-y-4 mb-6">
+                <div><label class="text-xs text-white/50 uppercase mb-1 block">Resolución</label><select id="stream-resolution" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500"><option value="640,480">480p</option><option value="1280,720" selected>720p (HD)</option><option value="1920,1080">1080p (Full HD)</option><option value="3840,2160">4K (Ultra HD)</option></select></div>
+                <div><label class="text-xs text-white/50 uppercase mb-1 block">FPS</label><select id="stream-fps" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500"><option value="15">15 FPS</option><option value="30" selected>30 FPS</option><option value="60">60 FPS</option></select></div>
+            </div>
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeStreamSettings()" class="px-4 py-2 text-white/70 hover:text-white">Cancelar</button>
+                <button onclick="startScreenShareWithSettings()" class="flow-gradient-bg text-white px-6 py-2 rounded-lg font-semibold">Iniciar Transmisión</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Unirse a Servidor -->
+    <div id="modal-join" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center">
+        <div class="glass rounded-2xl p-8 w-96 border border-white/10">
+            <h2 class="text-2xl font-bold text-white mb-2 text-center">Unirse a un Servidor</h2>
+            <p class="text-white/50 mb-6 text-center text-sm">Introduce el código de invitación que te dio tu amigo.</p>
+            <input id="join-code-input" type="text" placeholder="FLW-SRV-XXXX" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-500 mb-6 text-center font-mono uppercase tracking-widest">
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeJoinModal()" class="px-4 py-2 text-white/70 hover:text-white">Cancelar</button>
+                <button onclick="joinServer()" class="flow-gradient-bg text-white px-6 py-2 rounded-lg font-semibold">Unirse</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-server-settings" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center">
+        <div class="glass rounded-2xl w-[800px] max-w-4xl h-[600px] border border-white/10 flex overflow-hidden relative">
+            <div class="w-60 bg-black/30 p-4 border-r border-white/5 overflow-y-auto">
+                <h2 class="text-white font-bold text-lg mb-6" id="settings-server-name">Servidor</h2>
+                <p class="text-xs font-bold text-white/40 uppercase px-2 mb-2">Administración</p>
+                <button onclick="switchServerSettingsTab('general')" id="srv-tab-general" class="w-full text-left px-3 py-2 rounded bg-white/10 text-white text-sm mb-1">General</button>
+                <button onclick="switchServerSettingsTab('roles')" id="srv-tab-roles" class="w-full text-left px-3 py-2 rounded hover:bg-white/5 text-white/60 text-sm mb-1">Roles</button>
+                <button onclick="switchServerSettingsTab('members')" id="srv-tab-members" class="w-full text-left px-3 py-2 rounded hover:bg-white/5 text-white/60 text-sm mb-1">Miembros</button>
+            </div>
+            <div class="flex-1 p-8 overflow-y-auto">
+                <div id="srv-set-tab-general" class="srv-settings-tab">
+                    <h3 class="text-white font-bold text-xl mb-6">General</h3>
+                    <label class="text-xs text-white/50 uppercase mb-1 block">Nombre del Servidor</label>
+                    <input id="srv-name-input" type="text" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500 mb-6">
+                    <button onclick="updateServerName()" class="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded text-sm mb-12">Guardar Nombre</button>
+                    <div class="border-t border-white/10 pt-6"><h4 class="text-red-400 font-bold mb-2">Zona de Peligro</h4><button onclick="deleteServer()" class="bg-red-500/20 hover:bg-red-500/40 border border-red-500 text-red-400 px-4 py-2 rounded text-sm">Eliminar Servidor</button></div>
+                </div>
+                <div id="srv-set-tab-roles" class="srv-settings-tab hidden">
+                    <div class="flex justify-between items-center mb-6"><h3 class="text-white font-bold text-xl">Roles</h3><button onclick="document.getElementById('role-creator').classList.toggle('hidden')" class="flow-gradient-bg text-white px-4 py-2 rounded text-sm font-semibold">Crear Rol</button></div>
+                    <div id="role-creator" class="hidden glass p-4 rounded-xl mb-6 border border-white/10">
+                        <input id="role-name-input" type="text" placeholder="Nombre del rol" class="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500 mb-3">
+                        <div class="flex items-center gap-2 mb-3"><input type="color" id="role-color-input" value="#7B2FBE" class="w-8 h-8 rounded cursor-pointer bg-transparent border-none"><span class="text-white/60 text-xs">Color del rol</span></div>
+                        <div class="space-y-2 mb-4 text-sm">
+                            <label class="flex items-center gap-2 text-white/80"><input id="role-admin-input" type="checkbox" class="w-4 h-4 accent-purple-600"> Administrador</label>
+                            <label class="flex items-center gap-2 text-white/80"><input id="role-channels-input" type="checkbox" class="w-4 h-4 accent-purple-600"> Gestionar Canales</label>
+                            <label class="flex items-center gap-2 text-white/80"><input id="role-kick-input" type="checkbox" class="w-4 h-4 accent-purple-600"> Expulsar</label>
+                            <label class="flex items-center gap-2 text-white/80"><input id="role-ban-input" type="checkbox" class="w-4 h-4 accent-purple-600"> Banear</label>
+                        </div>
+                        <button onclick="createRole()" class="flow-gradient-bg text-white py-2 rounded-lg font-semibold text-sm w-full">Crear Rol</button>
+                    </div>
+                    <div id="roles-list" class="space-y-2"></div>
+                </div>
+                <div id="srv-set-tab-members" class="srv-settings-tab hidden"><h3 class="text-white font-bold text-xl mb-6">Miembros</h3><div id="settings-members-list" class="space-y-3"></div></div>
+            </div>
+            <button onclick="closeServerSettings()" class="absolute top-4 right-4 text-white/60 hover:text-white p-2 rounded-full hover:bg-white/10"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+        </div>
+    </div>
+
+    <!-- Modal Llamada Entrante -->
+    <div id="modal-incoming-call" class="modal-overlay fixed inset-0 bg-black/80 backdrop-blur-md z-[60] hidden items-center justify-center">
+        <div class="glass rounded-2xl p-8 w-80 border border-white/10 flex flex-col items-center text-center">
+            <h2 class="text-lg font-bold text-white mb-1">Llamada Entrante</h2>
+            <p id="incoming-call-name" class="text-white/50 mb-6">Usuario</p>
+            <div id="incoming-call-avatar" class="w-24 h-24 rounded-full bg-purple-600 mb-8 bg-cover bg-center"></div>
+            <div class="flex gap-8">
+                <button onclick="rejectCall()" class="bg-red-500/20 border border-red-500 p-4 rounded-full hover:bg-red-500/40 text-red-400 transition-smooth" title="Rechazar">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="23" y1="1" x2="1" y2="23"></line><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path></svg>
+                </button>
+                <button onclick="acceptCall()" class="bg-green-500/20 border border-green-500 p-4 rounded-full hover:bg-green-500/40 text-green-400 transition-smooth animate-pulse" title="Aceptar">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenedor de Notificaciones (Toasts) -->
+    <div id="toast-container" class="fixed top-4 right-4 z-[300] space-y-3 pointer-events-none"></div>
+
+    <!-- Firebase y App -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDfL9n2zbdi3HIaP_oYMUFeNOr7f2wdAZw",
+            authDomain: "flowcord-ee670.firebaseapp.com",
+            databaseURL: "https://flowcord-ee670-default-rtdb.firebaseio.com",
+            projectId: "flowcord-ee670",
+            storageBucket: "flowcord-ee670.firebasestorage.app",
+            messagingSenderId: "651483046103",
+            appId: "1:651483046103:web:50a945e24516decf4bd092",
+            measurementId: "G-CJ7HXWKV4Q"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const auth = firebase.auth();
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -32,6 +32,7 @@ let currentDmFriendFlowId = null;
 let incomingCallRef = null;
 let ringtoneInterval = null;
 let currentIncomingCall = null;
+let callStatusRef = null;
 
 // --- INYECTAR CSS ---
 const flowStyle = document.createElement('style');
@@ -122,10 +123,12 @@ window.onload = () => {
                         document.getElementById('modal-incoming-call').classList.add('flex');
                         startRingtone();
                         currentIncomingCall = callData;
-                    } else if (!callData) {
+                    } else if (!callData || (callData && callData.status !== 'ringing')) {
                         document.getElementById('modal-incoming-call').classList.remove('flex');
                         stopRingtone();
-                        currentIncomingCall = null;
+                        if (!currentIncomingCall || currentIncomingCall.status === 'ringing') {
+                            currentIncomingCall = null;
+                        }
                     }
                 });
             } else { await auth.signOut(); showAuth(); }
@@ -225,6 +228,7 @@ async function handleKeyPress(e) { if (e.key === 'Enter') { const i = document.g
 
 // --- LLAMADAS DM Y SERVIDOR (WEBRTC) ---
 async function startCallWithFriend() { 
+    if (!currentDmFriendFlowId) return;
     isViewer = true; 
     const name = document.getElementById('chat-header-title').innerText; 
     document.getElementById('text-chat-area').classList.add('hidden'); 
@@ -240,21 +244,26 @@ async function startCallWithFriend() {
     const recipient = await getUserByFlowId(currentDmFriendFlowId);
     if (!recipient) return showFlowAlert("Error", "Usuario no encontrado.", "error");
     
+    // GUARDAR el chatId ANTES de hacer cualquier cosa
+    const callChatId = currentChatId;
+    
     // Escribir solicitud de llamada en el nodo del destinatario
     await db.ref('users/' + recipient.uid + '/incomingCall').set({
-        caller: session.uid, callerName: session.username, callerAvatar: session.avatar || null, chatId: currentChatId, status: 'ringing'
+        caller: session.uid, callerName: session.username, callerAvatar: session.avatar || null, chatId: callChatId, status: 'ringing'
     });
 
-    // Escuchar mi propio nodo para la respuesta
-    db.ref('users/' + session.uid + '/incomingCall/status').on('value', async snap => {
-        if (snap.val() === 'accepted') {
+    // Escuchar respuesta en el nodo del destinatario
+    callStatusRef = db.ref('users/' + recipient.uid + '/incomingCall/status');
+    callStatusRef.on('value', async snap => {
+        const status = snap.val();
+        if (status === 'accepted') {
             document.getElementById('voice-chat-area-title').innerText = "Llamada con " + name;
             document.getElementById('btn-share').classList.remove('hidden');
             document.getElementById('btn-gamepad').classList.remove('hidden');
-            currentVoicePath = `dms/${currentChatId}/call`;
+            currentVoicePath = `dms/${callChatId}/call`;
             await joinVoice();
-            db.ref('users/' + session.uid + '/incomingCall').remove(); // Limpiar al conectar
-        } else if (snap.val() === 'rejected') {
+            if (callStatusRef) { callStatusRef.off(); callStatusRef = null; }
+        } else if (status === 'rejected') {
             showFlowAlert("Llamada Rechazada", name + " rechazó la llamada.", "error");
             disconnectVoice();
         }
@@ -264,16 +273,19 @@ async function startCallWithFriend() {
 async function acceptCall() {
     if (!currentIncomingCall) return;
     
+    // GUARDAR todos los datos ANTES de hacer cualquier cambio en Firebase
+    const savedCallData = { ...currentIncomingCall };
+    
     // Avisar al llamante que aceptaste
-    db.ref('users/' + currentIncomingCall.caller + '/incomingCall/status').set('accepted');
+    await db.ref('users/' + savedCallData.caller + '/incomingCall/status').set('accepted');
     
     // Limpiar mi notificación
-    db.ref('users/' + session.uid + '/incomingCall').remove();
+    await db.ref('users/' + session.uid + '/incomingCall').remove();
     stopRingtone();
     document.getElementById('modal-incoming-call').classList.remove('flex');
     
     isViewer = true;
-    const name = document.getElementById('incoming-call-name').innerText;
+    const name = savedCallData.callerName;
     document.getElementById('text-chat-area').classList.add('hidden'); 
     document.getElementById('voice-chat-area').classList.remove('hidden'); 
     document.getElementById('voice-chat-area-title').innerText = "Llamada con " + name;
@@ -281,15 +293,18 @@ async function acceptCall() {
     document.getElementById('stream-container').classList.add('hidden');
     document.getElementById('btn-gamepad').classList.remove('hidden');
     
-    currentChatId = currentIncomingCall.chatId;
+    // Usar el chatId guardado
+    currentChatId = savedCallData.chatId;
     currentVoicePath = `dms/${currentChatId}/call`;
     currentIncomingCall = null;
-    joinVoice();
+    
+    await joinVoice();
 }
 
 function rejectCall() {
     if (!currentIncomingCall) return;
-    db.ref('users/' + currentIncomingCall.caller + '/incomingCall/status').set('rejected');
+    const savedCaller = currentIncomingCall.caller;
+    db.ref('users/' + savedCaller + '/incomingCall/status').set('rejected');
     db.ref('users/' + session.uid + '/incomingCall').remove();
     stopRingtone();
     document.getElementById('modal-incoming-call').classList.remove('flex');
@@ -306,7 +321,7 @@ async function selectVoiceChannel(name) {
     document.getElementById('chat-header-title').innerText = name; 
     document.getElementById('voice-chat-area-title').innerText = name; 
     document.getElementById('btn-share').classList.remove('hidden'); 
-    document.getElementById('btn-gamepad').classList.add('hidden'); // Ocultar botón de control en servidores
+    document.getElementById('btn-gamepad').classList.add('hidden');
     document.getElementById('stream-container').classList.add('hidden'); 
     if (currentMsgRef) currentMsgRef.off(); 
     currentChatType = null;
@@ -332,12 +347,11 @@ async function joinVoice() {
 
         db.ref(`${currentVoicePath}/users`).on('child_added', async snap => {
             if (snap.key !== session.uid) {
-                // Obtener datos del usuario remoto ANTES de crear el peer
                 const userSnap = await db.ref('users/' + snap.key).once('value');
                 if (userSnap.exists()) {
                     remoteUsersData[snap.key] = userSnap.val();
-                    renderCallParticipants(); // Renderizar UI con el nombre correcto
-                    createPeer(snap.key, snap.val());
+                    renderCallParticipants();
+                    createPeer(snap.key);
                 }
             }
         });
@@ -356,7 +370,6 @@ async function joinVoice() {
 async function createPeer(remoteUid) {
     if (peerConnections[remoteUid]) return;
     
-    // AÑADIDO SERVIDOR TURN PARA ATRAVESAR NAT Y PODER ESCUCHAR/VER
     const pc = new RTCPeerConnection({
         'iceServers': [
             {'urls': 'stun:stun.l.google.com:19302'},
@@ -482,9 +495,18 @@ async function disconnectVoice() {
     if (voiceConnectionRef) { voiceConnectionRef.remove(); voiceConnectionRef = null; }
     if (currentVoicePath) { db.ref(`${currentVoicePath}/users`).off(); db.ref(`${currentVoicePath}/offers`).off(); db.ref(`${currentVoicePath}/answers`).off(); db.ref(`${currentVoicePath}/ice`).off(); }
     
-    // Limpiar notificaciones de llamada si cuelgas tú
-    if (currentIncomingCall) { db.ref('users/' + currentIncomingCall.caller + '/incomingCall/status').set('rejected'); db.ref('users/' + session.uid + '/incomingCall').remove(); currentIncomingCall = null; }
-    if (currentDmFriendFlowId) { const r = await getUserByFlowId(currentDmFriendFlowId); if (r) { db.ref('users/' + r.uid + '/incomingCall').remove(); } db.ref('users/' + session.uid + '/incomingCall').remove(); }
+    // Limpiar notificaciones de llamada
+    if (callStatusRef) { callStatusRef.off(); callStatusRef = null; }
+    if (currentIncomingCall) { 
+        db.ref('users/' + currentIncomingCall.caller + '/incomingCall/status').set('rejected'); 
+        db.ref('users/' + session.uid + '/incomingCall').remove(); 
+        currentIncomingCall = null; 
+    }
+    if (currentDmFriendFlowId) { 
+        const r = await getUserByFlowId(currentDmFriendFlowId); 
+        if (r) { db.ref('users/' + r.uid + '/incomingCall').remove(); } 
+        db.ref('users/' + session.uid + '/incomingCall').remove(); 
+    }
     
     currentVoicePath = null;
 

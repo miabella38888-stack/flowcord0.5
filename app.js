@@ -114,6 +114,7 @@ window.onload = () => {
                 db.ref('users/' + user.uid).on('value', (snap) => { if (snap.val()) { session = { uid: user.uid, ...snap.val() }; if (!currentServerId && document.getElementById('view-chat').classList.contains('active')) renderDMs(currentDmTab); } });
                 enterApp();
                 
+                // ESCUCHA GLOBAL DE LLAMADAS ENTRANTES
                 db.ref('users/' + session.uid + '/incomingCall').on('value', snap => {
                     const callData = snap.val();
                     if (callData && callData.status === 'ringing' && callData.caller !== session.uid) {
@@ -203,7 +204,7 @@ async function joinServer() { const c = document.getElementById('join-code-input
 async function createServer() { const n = document.getElementById('server-name-input').value.trim() || "Nuevo"; const id = 'srv_' + Date.now(); const ic = 'FLW-SRV-' + Math.random().toString(36).substring(2, 6).toUpperCase(); const s = { id, name: n, img: tempServerImg, inviteCode: ic, roles: [{ id: 'r_admin', name: 'Admin', color: '#7B2FBE', isAdmin: true, permissions: ['admin', 'channels', 'kick', 'ban'] }, { id: 'r_everyone', name: 'Miembro', color: '#FFF', isAdmin: false, permissions: [] }], textChannels: ['general'], voiceChannels: ['Sala General'], members: [{ name: session.username, flowId: session.flowId, roleId: 'r_admin', status: 'online' }] }; await saveServerToDB(s); if (!session.servers) session.servers = []; session.servers.push(id); await saveUserToDB(session); closeModal(); addServerToUI(id, n, tempServerImg, true); }
 function addServerToUI(id, name, img, select = false) { const l = document.getElementById('server-list'); const el = document.createElement('div'); el.className = 'server-icon'; el.setAttribute('data-id', id); el.title = name; el.innerHTML = img ? `<img src="${img}" alt="${name}">` : `<span class="text-sm font-bold">${name.charAt(0)}</span>`; el.onclick = () => selectServer(id); el.oncontextmenu = async (e) => { e.preventDefault(); currentServerId = id; const m = document.getElementById('context-menu-server'); const ia = await checkAdmin(id); m.innerHTML = `<button onclick="openServerSettings()" class="w-full text-left px-3 py-2 text-white hover:bg-white/10 rounded text-sm mb-1">Ajustes</button><button onclick="copyInviteCode()" class="w-full text-left px-3 py-2 text-white hover:bg-white/10 rounded text-sm mb-1">Invitación</button>${ia ? '<button onclick="deleteServer()" class="w-full text-left px-3 py-2 text-red-400 hover:bg-red-500/20 rounded text-sm">Eliminar</button>' : ''}`; m.style.left = `${e.pageX}px`; m.style.top = `${e.pageY}px`; m.classList.remove('hidden'); }; l.appendChild(el); if (select) selectServer(id); }
 async function copyInviteCode() { const s = await getServerFromDB(currentServerId); navigator.clipboard.writeText(s.inviteCode); showFlowAlert("Copiado", s.inviteCode, 'success'); document.getElementById('context-menu-server').classList.add('hidden'); }
-async function selectServer(id) { currentServerId = id; const s = await getServerFromDB(id); document.querySelectorAll('.server-icon').forEach(s => s.classList.remove('active')); document.querySelector(`.server-icon[data-id="${id}"]`).classList.add('active'); document.getElementById('sidebar-title').innerText = s.name; let mh = `<div class="p-4"><h3 class="text-white/40 uppercase text-xs">Miembros - ${s.members.length}</h3></div>`; for (const m of s.members) { const u = await getUserByFlowId(m.flowId); const r = s.roles.find(ro => ro.id === m.roleId); const au = u && u.avatar ? u.avatar : null; mh += `<div class="p-2 flex items-center gap-2">${getAvatarHtml(au, m.name, 32)}<span class="text-sm" style="color: ${r ? r.color : '#FFF'}">${m.name}</span></div>`; } document.getElementById('member-list').innerHTML = mh; const ia = await checkAdmin(id); let h = `<div class="flex items-center justify-between px-2 mt-2"><span class="text-xs font-semibold text-white/40 uppercase">Texto</span>${ia ? '<button onclick="openChannelModal(\'text\')" class="text-white/40 hover:text-white">+</button>' : ''}</div>`; s.textChannels.forEach(ch => { h += `<div onclick="selectChannel(this, '${ch}')" class="channel-item px-2 py-2 rounded-md flex items-center gap-2 text-sm cursor-pointer group"><span class="flex-1"># ${ch}</span>${ia ? `<button onclick="event.stopPropagation(); deleteChannel('${ch}', 'text')" class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 p-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>` : ''}</div>`; }); h += `<div class="flex items-center justify-between px-2 mt-4"><span class="text-xs font-semibold text-white/40 uppercase">Voz</span>${ia ? '<button onclick="openChannelModal(\'voice\')" class="text-white/40 hover:text-white">+</button>' : ''}</div>`; s.voiceChannels.forEach(vc => { h += `<div onclick="selectVoiceChannel('${vc}', event)" class="channel-item px-2 py-2 rounded-md flex items-center gap-2 text-sm cursor-pointer group"><span class="flex-1">🔊 ${vc}</span>${ia ? `<button onclick="event.stopPropagation(); deleteChannel('${vc}', 'voice')" class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 p-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>` : ''}</div><div id="voice-users-${vc}" class="ml-6 mb-2 space-y-1"></div>`; }); document.getElementById('sidebar-content').innerHTML = h; document.getElementById('dm-tabs').classList.add('hidden'); document.getElementById('btn-add-friend').classList.add('hidden'); document.getElementById('btn-toggle-members').classList.remove('hidden'); document.getElementById('btn-call').classList.add('hidden'); db.ref(`servers/${id}/voice`).on('value', snap => { const vd = snap.val() || {}; s.voiceChannels.forEach(vc => { const d = document.getElementById('voice-users-' + vc); if (d) { let uh = ''; const us = vd[vc] && vd[vc].users ? vd[vc].users : {}; for (const uId in us) { const u = us[uId]; uh += `<div id="voice-user-${uId}" class="flex items-center gap-2 mt-1 text-xs text-white/60 border-2 border-transparent rounded-full p-0.5"><div class="w-5 h-5 rounded-full ${u.avatar ? 'bg-cover bg-center' : 'flow-gradient-bg'}" style="${u.avatar ? `background-image: url('${u.avatar}')` : ''}"></div><span>${u.name}</span></div>`; } d.innerHTML = uh; } }); }); const ft = document.querySelector('.channel-item'); if (ft) selectChannel(ft, s.textChannels[0]); }
+async function selectServer(id) { currentServerId = id; const s = await getServerFromDB(id); document.querySelectorAll('.server-icon').forEach(s => s.classList.remove('active')); document.querySelector(`.server-icon[data-id="${id}"]`).classList.add('active'); document.getElementById('sidebar-title').innerText = s.name; let mh = `<div class="p-4"><h3 class="text-white/40 uppercase text-xs">Miembros - ${s.members.length}</h3></div>`; for (const m of s.members) { const u = await getUserByFlowId(m.flowId); const r = s.roles.find(ro => ro.id === m.roleId); const au = u && u.avatar ? u.avatar : null; mh += `<div class="p-2 flex items-center gap-2">${getAvatarHtml(au, m.name, 32)}<span class="text-sm" style="color: ${r ? r.color : '#FFF'}">${m.name}</span></div>`; } document.getElementById('member-list').innerHTML = mh; const ia = await checkAdmin(id); let h = `<div class="flex items-center justify-between px-2 mt-2"><span class="text-xs font-semibold text-white/40 uppercase">Texto</span>${ia ? '<button onclick="openChannelModal(\'text\')" class="text-white/40 hover:text-white">+</button>' : ''}</div>`; s.textChannels.forEach(ch => { h += `<div onclick="selectChannel(this, '${ch}')" class="channel-item px-2 py-2 rounded-md flex items-center gap-2 text-sm cursor-pointer group"><span class="flex-1"># ${ch}</span>${ia ? `<button onclick="event.stopPropagation(); deleteChannel('${ch}', 'text')" class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 p-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>` : ''}</div>`; }); h += `<div class="flex items-center justify-between px-2 mt-4"><span class="text-xs font-semibold text-white/40 uppercase">Voz</span>${ia ? '<button onclick="openChannelModal(\'voice\')" class="text-white/40 hover:text-white">+</button>' : ''}</div>`; s.voiceChannels.forEach(vc => { h += `<div onclick="selectVoiceChannel('${vc}', this)" class="channel-item px-2 py-2 rounded-md flex items-center gap-2 text-sm cursor-pointer group"><span class="flex-1">🔊 ${vc}</span>${ia ? `<button onclick="event.stopPropagation(); deleteChannel('${vc}', 'voice')" class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 p-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>` : ''}</div><div id="voice-users-${vc}" class="ml-6 mb-2 space-y-1"></div>`; }); document.getElementById('sidebar-content').innerHTML = h; document.getElementById('dm-tabs').classList.add('hidden'); document.getElementById('btn-add-friend').classList.add('hidden'); document.getElementById('btn-toggle-members').classList.remove('hidden'); document.getElementById('btn-call').classList.add('hidden'); db.ref(`servers/${id}/voice`).on('value', snap => { const vd = snap.val() || {}; s.voiceChannels.forEach(vc => { const d = document.getElementById('voice-users-' + vc); if (d) { let uh = ''; const us = vd[vc] && vd[vc].users ? vd[vc].users : {}; for (const uId in us) { const u = us[uId]; uh += `<div id="voice-user-${uId}" class="flex items-center gap-2 mt-1 text-xs text-white/60 border-2 border-transparent rounded-full p-0.5"><div class="w-5 h-5 rounded-full ${u.avatar ? 'bg-cover bg-center' : 'flow-gradient-bg'}" style="${u.avatar ? `background-image: url('${u.avatar}')` : ''}"></div><span>${u.name}</span></div>`; } d.innerHTML = uh; } }); }); const ft = document.querySelector('.channel-item'); if (ft) selectChannel(ft, s.textChannels[0]); }
 async function deleteChannel(n, t) { if (!await checkAdmin(currentServerId)) return; const s = await getServerFromDB(currentServerId); if (t === 'text') { s.textChannels = s.textChannels.filter(c => c !== n); await db.ref(`servers/${currentServerId}/messages/${n}`).remove(); } else { s.voiceChannels = s.voiceChannels.filter(c => c !== n); } await saveServerToDB(s); selectServer(currentServerId); showFlowAlert("OK", "Canal borrado.", 'success'); }
 async function openServerSettings() { if (!await checkAdmin(currentServerId)) return; currentSettingsServerId = currentServerId; const s = await getServerFromDB(currentSettingsServerId); document.getElementById('settings-server-name').innerText = s.name; document.getElementById('srv-name-input').value = s.name; const rl = document.getElementById('roles-list'); rl.innerHTML = ''; s.roles.forEach(r => { rl.innerHTML += `<div class="flex items-center justify-between bg-black/20 px-4 py-2 rounded-lg"><div class="flex items-center gap-2"><div style="width:12px;height:12px;border-radius:50%;background:${r.color};"></div><span style="color:${r.color}" class="font-medium text-sm">${r.name}</span>${r.isAdmin ? '<span class="text-xs text-red-400">(Admin)</span>' : ''}</div>${r.id !== 'r_admin' && r.id !== 'r_everyone' ? `<button onclick="deleteRole('${r.id}')" class="text-white/40 hover:text-red-400 text-xs">Borrar</button>` : ''}</div>`; }); const ld = document.getElementById('settings-members-list'); ld.innerHTML = ''; for (const [i, m] of s.members.entries()) { const ro = s.roles.map(r => `<option value="${r.id}" ${m.roleId === r.id ? 'selected' : ''}>${r.name}</option>`).join(''); const u = await getUserByFlowId(m.flowId); const au = u && u.avatar ? u.avatar : null; ld.innerHTML += `<div class="flex items-center gap-3 bg-black/20 p-2 rounded-lg">${getAvatarHtml(au, m.name, 32)}<span class="text-white text-sm flex-1">${m.name}</span><select onchange="updateMemberRole(${i}, this.value)" class="bg-black/30 border border-white/10 rounded px-2 py-1 text-white text-xs outline-none">${ro}</select></div>`; } document.getElementById('modal-server-settings').classList.add('flex'); document.getElementById('context-menu-server').classList.add('hidden'); switchServerSettingsTab('general'); }
 async function deleteRole(rId) { const s = await getServerFromDB(currentSettingsServerId); s.roles = s.roles.filter(r => r.id !== rId); await saveServerToDB(s); openServerSettings(); }
@@ -224,7 +225,7 @@ function listenToMessages() { if (currentMsgRef) currentMsgRef.off(); document.g
 function displayMessage(u, t, tm, au) { const c = document.getElementById('chat-messages'); const me = u === session.username; const bg = me ? "flow-gradient-bg text-white" : "bg-white/5"; const al = me ? "flex-row-reverse" : "flex-row"; const ta = me ? "items-end text-right" : "items-start text-left"; c.insertAdjacentHTML('beforeend', `<div class="message-enter flex gap-3 items-start ${al}"><div class="w-10 h-10 rounded-full ${au ? 'bg-cover bg-center' : 'flow-gradient-bg'} flex items-center justify-center text-white font-bold flex-shrink-0" style="${au ? `background-image: url('${au}')` : ''}">${au ? '' : u.charAt(0)}</div><div class="flex flex-col ${ta} max-w-[70%]"><div class="flex items-baseline gap-2 ${me ? 'flex-row-reverse' : ''}"><span class="font-semibold text-white">${u}</span><span class="text-xs text-white/30">${tm}</span></div><p class="text-white/90 mt-1 ${bg} px-3 py-2 rounded-2xl ${me ? 'rounded-tr-none' : 'rounded-tl-none'}">${t}</p></div></div>`); c.scrollTop = c.scrollHeight; }
 async function handleKeyPress(e) { if (e.key === 'Enter') { const i = document.getElementById('chat-input'); const t = i.value.trim(); if (t) { i.value = ""; const tm = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); const md = { user: session.username, text: t, time: tm, avatar: session.avatar || null }; let p = ''; if (currentChatType === 'server') p = `servers/${currentServerId}/messages/${currentChatName}`; else if (currentChatType === 'dm') p = `dms/${currentChatId}/messages`; if (p) { await db.ref(p).push(md); playSound('message'); } } } }
 
-// --- LLAMADAS DM Y SERVIDOR (WEBRTC) ---
+// --- LLAMADAS DM Y SERVIDOR (WEBRTC REESCRITO) ---
 async function startCallWithFriend() { 
     if (!currentDmFriendFlowId) return;
     isViewer = true; 
@@ -301,10 +302,10 @@ function rejectCall() {
     currentIncomingCall = null;
 }
 
-async function selectVoiceChannel(name, ev) { 
+async function selectVoiceChannel(name, el) { 
     isViewer = false; 
     document.querySelectorAll('.channel-item').forEach(c => c.classList.remove('active')); 
-    if(ev) ev.target.classList.add('active');
+    if (el) el.classList.add('active');
     document.getElementById('text-chat-area').classList.add('hidden'); 
     document.getElementById('voice-chat-area').classList.remove('hidden'); 
     document.getElementById('chat-header-icon').innerText = "🔊"; 
@@ -319,15 +320,17 @@ async function selectVoiceChannel(name, ev) {
     await joinVoice();
 }
 
+// --- MOTOR WEBRTC NUEVO Y LIMPIO ---
 async function joinVoice() {
     try {
         const micId = document.getElementById('settings-mic')?.value;
         const camId = document.getElementById('settings-cam')?.value;
-        // Arreglado: Solo usar exact si hay un ID
         const constraints = { audio: micId ? { deviceId: { exact: micId } } : true, video: camId ? { deviceId: { exact: camId } } : true };
+        
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
         isMicOn = true; isCameraOn = false;
-        localStream.getAudioTracks()[0].enabled = isMicOn; localStream.getVideoTracks()[0].enabled = isCameraOn;
+        localStream.getAudioTracks()[0].enabled = isMicOn; 
+        localStream.getVideoTracks()[0].enabled = isCameraOn;
         
         renderCallParticipants(); 
         playSound('join');
@@ -346,16 +349,23 @@ async function joinVoice() {
                 }
             }
         });
+        
         db.ref(`${currentVoicePath}/users`).on('child_removed', snap => {
             if (peerConnections[snap.key]) { peerConnections[snap.key].close(); delete peerConnections[snap.key]; }
             if (remoteStreams[snap.key]) delete remoteStreams[snap.key];
             if (audioAnalysers[snap.key]) delete audioAnalysers[snap.key];
             if (remoteUsersData[snap.key]) delete remoteUsersData[snap.key];
+            const audioEl = document.getElementById(`remote-audio-${snap.key}`);
+            if (audioEl) audioEl.remove();
             renderCallParticipants();
         });
 
         startSpeakingDetection();
-    } catch (e) { showFlowAlert('Error', 'Permiso de micrófono/cámara denegado.', 'error'); disconnectVoice(); }
+    } catch (e) { 
+        console.error("Voice error:", e);
+        showFlowAlert('Error', 'Permiso de micrófono/cámara denegado.', 'error'); 
+        disconnectVoice(); 
+    }
 }
 
 async function createPeer(remoteUid) {
@@ -363,27 +373,33 @@ async function createPeer(remoteUid) {
     
     const pc = new RTCPeerConnection({ 'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}] });
     peerConnections[remoteUid] = pc;
+    
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     
-    pc.onicecandidate = (e) => { if (e.candidate) db.ref(`${currentVoicePath}/ice/${session.uid}/${remoteUid}`).push(e.candidate.toJSON()); };
+    pc.onicecandidate = (e) => { 
+        if (e.candidate) {
+            db.ref(`${currentVoicePath}/ice/${session.uid}/${remoteUid}`).push(e.candidate.toJSON());
+        }
+    };
     
     pc.ontrack = (e) => {
         remoteStreams[remoteUid] = e.streams[0];
         
-        let audioEl = document.getElementById('remote-audio-' + remoteUid);
+        // Contenedor oculto para audios remotos
+        const container = document.getElementById('audio-container');
+        let audioEl = document.getElementById(`remote-audio-${remoteUid}`);
         if (!audioEl) { 
             audioEl = document.createElement('audio'); 
-            audioEl.id = 'remote-audio-' + remoteUid; 
+            audioEl.id = `remote-audio-${remoteUid}`; 
             audioEl.autoplay = true; 
             audioEl.playsInline = true;
-            audioEl.style.display = 'none';
-            document.body.appendChild(audioEl); 
+            container.appendChild(audioEl); 
         }
         audioEl.srcObject = e.streams[0];
         
-        // Forzar reproducción de audio remoto
-        audioEl.onloadedmetadata = () => { audioEl.play().catch(err => console.log("Audio play error:", err)); };
-        audioEl.play().catch(err => console.log("Autoplay blocked:", err)); 
+        // Forzar reproducción
+        audioEl.onloadedmetadata = () => audioEl.play().catch(err => console.log("Autoplay blocked:", err));
+        audioEl.play().catch(err => console.log("Audio play error:", err)); 
         
         const spkId = document.getElementById('settings-speaker')?.value;
         if (spkId && audioEl.setSinkId) { try { audioEl.setSinkId(spkId); } catch(err) {} }
@@ -398,25 +414,42 @@ async function createPeer(remoteUid) {
         renderCallParticipants();
     };
 
+    // Lógica de Oferta y Respuesta (Caller vs Callee)
     if (session.uid < remoteUid) {
-        const of = await pc.createOffer(); await pc.setLocalDescription(of);
-        await db.ref(`${currentVoicePath}/offers/${session.uid}/${remoteUid}`).set(of.toJSON());
-        db.ref(`${currentVoicePath}/answers/${remoteUid}/${session.uid}`).on('value', async s => { if (s.exists() && !pc.currentRemoteDescription) await pc.setRemoteDescription(new RTCSessionDescription(s.val())); });
+        // Caller
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await db.ref(`${currentVoicePath}/offers/${session.uid}/${remoteUid}`).set(offer.toJSON());
+        
+        db.ref(`${currentVoicePath}/answers/${remoteUid}/${session.uid}`).on('value', async s => { 
+            if (s.exists() && !pc.currentRemoteDescription) {
+                await pc.setRemoteDescription(new RTCSessionDescription(s.val()));
+            }
+        });
     } else {
+        // Callee
         db.ref(`${currentVoicePath}/offers/${remoteUid}/${session.uid}`).on('value', async s => {
             if (s.exists() && !pc.currentRemoteDescription) {
                 await pc.setRemoteDescription(new RTCSessionDescription(s.val()));
-                const an = await pc.createAnswer(); await pc.setLocalDescription(an);
-                await db.ref(`${currentVoicePath}/answers/${session.uid}/${remoteUid}`).set(an.toJSON());
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                await db.ref(`${currentVoicePath}/answers/${session.uid}/${remoteUid}`).set(answer.toJSON());
             }
         });
     }
-    db.ref(`${currentVoicePath}/ice/${remoteUid}/${session.uid}`).on('child_added', s => { if (s.exists()) try { pc.addIceCandidate(new RTCIceCandidate(s.val())); } catch(e) {} });
+    
+    // Escuchar candidatos ICE del remoto
+    db.ref(`${currentVoicePath}/ice/${remoteUid}/${session.uid}`).on('child_added', s => { 
+        if (s.exists()) {
+            try { pc.addIceCandidate(new RTCIceCandidate(s.val())); } catch(e) {}
+        }
+    });
 }
 
 function renderCallParticipants() {
     const grid = document.getElementById('participants-grid');
     let html = '';
+    
     const shape = isCameraOn ? 'rounded-2xl' : 'rounded-full';
     const la = session.avatar ? `<div style="width:100%;height:100%;border-radius:inherit;background-image:url('${session.avatar}');background-size:cover;"></div>` : `<div style="width:100%;height:100%;border-radius:inherit;background:linear-gradient(135deg,var(--flow-purple),var(--flow-yellow));"></div>`;
     html += `<div class="flex flex-col items-center gap-2 group"><div id="local-participant" class="relative w-48 h-48 ${shape} bg-black overflow-hidden border-4 border-gray-700 flex items-center justify-center transition-all duration-300">${la}<video id="local-video" class="hidden w-full h-full object-cover absolute inset-0" autoplay muted playsinline></video></div><span class="text-white text-sm font-medium mt-1">${truncateName(session.username)} (Tú)</span></div>`;
@@ -429,8 +462,13 @@ function renderCallParticipants() {
     }
     grid.innerHTML = html;
     
-    const lv = document.getElementById('local-video'); if (localStream && lv) { lv.srcObject = localStream; lv.classList.toggle('hidden', !isCameraOn); }
-    for (const uid in remoteStreams) { const rv = document.getElementById('remote-video-' + uid); if (rv) { rv.srcObject = remoteStreams[uid]; rv.classList.toggle('hidden', !remoteUsersData[uid]?.cam); } }
+    const lv = document.getElementById('local-video'); 
+    if (localStream && lv) { lv.srcObject = localStream; lv.classList.toggle('hidden', !isCameraOn); }
+    
+    for (const uid in remoteStreams) { 
+        const rv = document.getElementById('remote-video-' + uid); 
+        if (rv) { rv.srcObject = remoteStreams[uid]; rv.classList.toggle('hidden', !remoteUsersData[uid]?.cam); } 
+    }
 }
 
 function startSpeakingDetection() {
@@ -443,6 +481,7 @@ function startSpeakingDetection() {
     
     function check() {
         const data = new Uint8Array(an.frequencyBinCount);
+        
         an.getByteFrequencyData(data); let sum = 0; for(let i=0;i<data.length;i++) sum+=data[i]; let avg = sum/data.length;
         const ld = document.getElementById('local-participant'); if(ld) { if (avg > 15 && isMicOn) ld.classList.add('speaking'); else ld.classList.remove('speaking'); }
         const ls = document.getElementById('voice-user-' + session.uid); if(ls) { if (avg > 15 && isMicOn) ls.classList.add('speaking'); else ls.classList.remove('speaking'); }
@@ -470,14 +509,16 @@ function toggleFullscreen(id) { const e = document.getElementById(id); if (!docu
 function toggleRemoteMute(u) { showFlowAlert('Silenciado', `Has silenciado a ${u}.`, 'info'); }
 function requestRemoteControl() { const b = document.getElementById('btn-gamepad'); if (b.title.includes("Solicitar")) { b.title = "Solicitando..."; b.disabled = true; b.classList.add('animate-pulse'); setTimeout(() => { b.title = "Control Concedido"; b.classList.remove('animate-pulse'); b.classList.remove('text-yellow-400'); b.classList.add('text-green-400'); b.disabled = false; }, 2000); } }
 
-async function disconnectVoice() { 
+function disconnectVoice() { 
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; } 
     stopScreenShare(); 
     if (callRafId) cancelAnimationFrame(callRafId);
     
     for (let uid in peerConnections) { if(peerConnections[uid]) peerConnections[uid].close(); }
     peerConnections = {}; remoteStreams = {}; audioAnalysers = {}; remoteUsersData = {};
-    document.querySelectorAll('audio[id^="remote-audio-"]').forEach(el => el.remove());
+    
+    // Limpiar audios remotos
+    document.getElementById('audio-container').innerHTML = '';
     
     if (voiceConnectionRef) { voiceConnectionRef.remove(); voiceConnectionRef = null; }
     if (currentVoicePath) { db.ref(`${currentVoicePath}/users`).off(); db.ref(`${currentVoicePath}/offers`).off(); db.ref(`${currentVoicePath}/answers`).off(); db.ref(`${currentVoicePath}/ice`).off(); }
